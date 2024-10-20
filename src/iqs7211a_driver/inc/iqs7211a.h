@@ -8,6 +8,8 @@
 
 #define IQS7211A_PRODUCT_NUM 0x02FB
 
+#define I2C_LINE_DEBUG 1
+
 // Info Flags Byte Bits.
 #define IQS7211A_CHARGING_MODE_BIT_0 0
 #define IQS7211A_CHARGING_MODE_BIT_1 1
@@ -64,23 +66,23 @@
 /**
  * @brief  iqs7211a Init Enumeration.
  */
-//Reduced
-// typedef enum
-// {
-//   IQS7211A_INIT_NONE = (uint8_t)0x00,
-//   IQS7211A_INIT_VERIFY_PRODUCT,
-//   IQS7211A_INIT_READ_RESET,
-//   IQS7211A_INIT_CHIP_RESET,
-//   IQS7211A_INIT_UPDATE_SETTINGS,
-//   IQS7211A_INIT_CHECK_RESET,
-//   IQS7211A_INIT_ACK_RESET,
-//   IQS7211A_INIT_ATI,
-//   IQS7211A_INIT_WAIT_FOR_ATI,
-//   IQS7211A_INIT_READ_DATA,
-//   IQS7211A_INIT_ACTIVATE_EVENT_MODE,
-//   IQS7211A_INIT_ACTIVATE_STREAM_MODE,
-//   IQS7211A_INIT_DONE
-// } iqs7211a_init_e;
+// Reduced
+//  typedef enum
+//  {
+//    IQS7211A_INIT_NONE = (uint8_t)0x00,
+//    IQS7211A_INIT_VERIFY_PRODUCT,
+//    IQS7211A_INIT_READ_RESET,
+//    IQS7211A_INIT_CHIP_RESET,
+//    IQS7211A_INIT_UPDATE_SETTINGS,
+//    IQS7211A_INIT_CHECK_RESET,
+//    IQS7211A_INIT_ACK_RESET,
+//    IQS7211A_INIT_ATI,
+//    IQS7211A_INIT_WAIT_FOR_ATI,
+//    IQS7211A_INIT_READ_DATA,
+//    IQS7211A_INIT_ACTIVATE_EVENT_MODE,
+//    IQS7211A_INIT_ACTIVATE_STREAM_MODE,
+//    IQS7211A_INIT_DONE
+//  } iqs7211a_init_e;
 
 typedef enum
 {
@@ -146,7 +148,8 @@ typedef struct
 //   iqs7211a_init_e init_state;
 // } iqs7211a_s;
 
-typedef struct {
+typedef struct
+{
   iqs7211a_state_e dev_state;
   iqs7211a_memory_map IQS_memory_map;
   struct i2c_dt_spec i2c_handle;
