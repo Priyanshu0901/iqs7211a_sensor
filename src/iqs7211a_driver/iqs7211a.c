@@ -176,7 +176,7 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
   memset(data, 0, 2);
 
   ret = iqs7211a_read(IQS7211A_MM_PROD_NUM, data, 2, &i2c_handle);
-  if (ret != 1)
+  if (ret < 0)
   {
     return -1;
   }
@@ -185,7 +185,7 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
   memset(data, 0, 2);
 
   ret = iqs7211a_read(IQS7211A_MM_MAJOR_VERSION_NUM, data, 2, &i2c_handle);
-  if (ret != 1)
+  if (ret < 0)
   {
     return -1;
   }
@@ -194,7 +194,7 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
   memset(data, 0, 2);
 
   ret = iqs7211a_read(IQS7211A_MM_MINOR_VERSION_NUM, data, 2, &i2c_handle);
-  if (ret != 1)
+  if (ret < 0)
   {
     return -1;
   }
@@ -452,7 +452,7 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
   iqs7211a_write(IQS7211A_MM_CYCLE_SETUP_10_17, transferBytes, 24, &i2c_handle);
   printf("\t\t9. Write Cycle 10 - 17 Settings\n");
 
-  return 1;
+  return 0;
 }
 
 int iqs7211a_read(uint8_t reg_addr, const uint8_t *reg_data, uint32_t length, struct i2c_dt_spec *i2c_handle)

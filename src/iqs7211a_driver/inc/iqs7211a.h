@@ -159,7 +159,6 @@ typedef struct
 } iqs7211a_dev;
 
 int iqs7211a_init(iqs7211a_dev *dev_handle);
-void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pins);
-void iqs7211a_run(iqs7211a_dev *dev_handle);
+void iqs7211a_run(iqs7211a_dev *dev_handle); //Task Handle function
 
 #endif // IQS7211A_h
