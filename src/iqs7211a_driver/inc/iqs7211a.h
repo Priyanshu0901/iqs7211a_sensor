@@ -66,23 +66,22 @@
 /**
  * @brief  iqs7211a Init Enumeration.
  */
-// Reduced
-//  typedef enum
-//  {
-//    IQS7211A_INIT_NONE = (uint8_t)0x00,
-//    IQS7211A_INIT_VERIFY_PRODUCT,
-//    IQS7211A_INIT_READ_RESET,
-//    IQS7211A_INIT_CHIP_RESET,
-//    IQS7211A_INIT_UPDATE_SETTINGS,
-//    IQS7211A_INIT_CHECK_RESET,
-//    IQS7211A_INIT_ACK_RESET,
-//    IQS7211A_INIT_ATI,
-//    IQS7211A_INIT_WAIT_FOR_ATI,
-//    IQS7211A_INIT_READ_DATA,
-//    IQS7211A_INIT_ACTIVATE_EVENT_MODE,
-//    IQS7211A_INIT_ACTIVATE_STREAM_MODE,
-//    IQS7211A_INIT_DONE
-//  } iqs7211a_init_e;
+typedef enum
+{
+  IQS7211A_INIT_NONE = (uint8_t)0x00,
+  IQS7211A_INIT_VERIFY_PRODUCT,
+  IQS7211A_INIT_READ_RESET,
+  IQS7211A_INIT_CHIP_RESET,
+  IQS7211A_INIT_UPDATE_SETTINGS,
+  IQS7211A_INIT_CHECK_RESET,
+  IQS7211A_INIT_ACK_RESET,
+  IQS7211A_INIT_ATI,
+  IQS7211A_INIT_WAIT_FOR_ATI,
+  IQS7211A_INIT_READ_DATA,
+  IQS7211A_INIT_ACTIVATE_EVENT_MODE,
+  IQS7211A_INIT_ACTIVATE_STREAM_MODE,
+  IQS7211A_INIT_DONE
+} iqs7211a_init_e;
 
 typedef enum
 {
@@ -141,16 +140,16 @@ typedef struct
   uint8_t SYSTEM_CONTROL[2]; // 	0x50
 } iqs7211a_memory_map;
 
-// #pragma pack(1)
-// typedef struct
-// {
-//   iqs7211a_state_e state;
-//   iqs7211a_init_e init_state;
-// } iqs7211a_s;
+#pragma pack(1)
+typedef struct
+{
+  iqs7211a_state_e state;
+  iqs7211a_init_e init_state;
+} iqs7211a_s;
 
 typedef struct
 {
-  iqs7211a_state_e dev_state;
+  iqs7211a_s dev_state;
   iqs7211a_memory_map IQS_memory_map;
   struct i2c_dt_spec i2c_handle;
   struct gpio_dt_spec interrupt_pin;
@@ -159,6 +158,6 @@ typedef struct
 } iqs7211a_dev;
 
 int iqs7211a_init(iqs7211a_dev *dev_handle);
-void iqs7211a_run(iqs7211a_dev *dev_handle); //Task Handle function
+void iqs7211a_run(iqs7211a_dev *dev_handle); // Task Handle function
 
 #endif // IQS7211A_h
