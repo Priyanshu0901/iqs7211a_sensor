@@ -63,11 +63,7 @@ int iqs7211a_init()
     return -1;
   }
   static struct gpio_callback pin_cb_data;
-  (void)gpio_init_callback(&pin_cb_data, iqs7211a_ready_interrupt, BIT(interrupt_pin.pin));
-  if (ret < 0)
-  {
-    return -1;
-  }
+  gpio_init_callback(&pin_cb_data, iqs7211a_ready_interrupt, BIT(interrupt_pin.pin));
   gpio_add_callback(interrupt_pin.port, &pin_cb_data);
   iqs7211a_sensor.iqs7211a_deviceRDY = false;
 
@@ -78,17 +74,16 @@ int iqs7211a_init()
 
 void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pin)
 {
-  printf("Interrupt Received\n");
   // Read the state of the interrupt pin
-  int pin_state = gpio_pin_get(dev, pin);
+  int pin_state = gpio_pin_get(iqs7211a_sensor.interrupt_pin.port, iqs7211a_sensor.interrupt_pin.pin);
 
   // Check the state and update iqs7211a_deviceRDY
   if (pin_state > 0) {
     iqs7211a_sensor.iqs7211a_deviceRDY = false;
-      printf("Rising edge\n");
+      printf("\nRising edge\n");
   } else {
     iqs7211a_sensor.iqs7211a_deviceRDY = true;
-      printf("Falling edge\n");
+      printf("\nFalling edge\n");
   }
 }
 
