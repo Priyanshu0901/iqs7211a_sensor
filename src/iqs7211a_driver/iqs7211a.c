@@ -2,36 +2,41 @@
 #include "board_param.h"
 #include <zephyr/sys/printk.h>
 
-int iqs7211a_init(iqs7211a_dev *dev_handle);
-int iqs7211a_start_up(iqs7211a_dev *dev_handle);
+int iqs7211a_init();
+void iqs7211a_run();
+iqs7211a_power_modes IQS7211A_getPowerMode(void);
+uint8_t IQS7211A_getNumFingers(void);
+
+int iqs7211a_start_up();
 int iqs7211a_read(uint8_t reg_addr, const uint8_t *reg_data, uint32_t length, struct i2c_dt_spec *i2c_handle);
 int iqs7211a_write(uint8_t reg_addr, const uint8_t *reg_data, uint32_t length, struct i2c_dt_spec *i2c_handle);
-void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pins);
-void iqs7211a_run(iqs7211a_dev *dev_handle);
-bool checkReset(iqs7211a_dev *dev_handle);
+void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pin);
+bool checkReset();
 
-void IQS7211A_writeMM(iqs7211a_dev *dev_handle);
+void IQS7211A_writeMM();
 uint8_t IQS7211A_setBit(uint8_t data, uint8_t bit_number);
 bool IQS7211A_getBit(uint8_t data, uint8_t bit_number);
 uint8_t IQS7211A_clearBit(uint8_t data, uint8_t bit_number);
-void IQS7211A_enableTPEvent(iqs7211a_dev *dev_handle);
-void IQS7211A_disableTPEvent(iqs7211a_dev *dev_handle);
-uint16_t IQS7211A_getAbsXCoordinate(iqs7211a_dev *dev_handle, uint8_t fingerNum);
-void IQS7211A_updateAbsCoordinates(iqs7211a_dev *dev_handle, uint8_t fingerNum);
-void IQS7211A_SW_Reset(iqs7211a_dev *dev_handle);
-void IQS7211A_setEventMode(iqs7211a_dev *dev_handle);
-void IQS7211A_updateInfoFlags(iqs7211a_dev *dev_handle);
-void IQS7211A_acknowledgeReset(iqs7211a_dev *dev_handle);
-bool IQS7211A_checkReset(iqs7211a_dev *dev_handle);
-void IQS7211A_queueValueUpdates(iqs7211a_dev *dev_handle);
-bool IQS7211A_readATIactive(iqs7211a_dev *dev_handle);
-void IQS7211A_ReATI(iqs7211a_dev *dev_handle);
+void IQS7211A_enableTPEvent();
+void IQS7211A_disableTPEvent();
+uint16_t IQS7211A_getAbsXCoordinate(uint8_t fingerNum);
+uint16_t IQS7211A_getAbsYCoordinate(uint8_t fingerNum);
+void IQS7211A_updateAbsCoordinates(uint8_t fingerNum);
+void IQS7211A_SW_Reset();
+void IQS7211A_setEventMode();
+void IQS7211A_updateInfoFlags();
+void IQS7211A_acknowledgeReset();
+bool IQS7211A_checkReset();
+void IQS7211A_queueValueUpdates();
+bool IQS7211A_readATIactive();
+void IQS7211A_ReATI();
 
-int iqs7211a_init(iqs7211a_dev *dev_handle)
+
+int iqs7211a_init()
 {
 
-  struct i2c_dt_spec dev_i2c_handle = dev_handle->i2c_handle;
-  struct gpio_dt_spec interrupt_pin = dev_handle->interrupt_pin;
+  struct i2c_dt_spec dev_i2c_handle = iqs7211a_sensor.i2c_handle;
+  struct gpio_dt_spec interrupt_pin = iqs7211a_sensor.interrupt_pin;
 
   if (!device_is_ready(dev_i2c_handle.bus))
   {
@@ -52,7 +57,7 @@ int iqs7211a_init(iqs7211a_dev *dev_handle)
     return -1;
   }
 
-  ret = gpio_pin_interrupt_configure_dt(&interrupt_pin, GPIO_INT_EDGE_TO_ACTIVE);
+  ret = gpio_pin_interrupt_configure_dt(&interrupt_pin, GPIO_INT_EDGE_BOTH);
   if (ret < 0)
   {
     return -1;
@@ -64,75 +69,83 @@ int iqs7211a_init(iqs7211a_dev *dev_handle)
     return -1;
   }
   gpio_add_callback(interrupt_pin.port, &pin_cb_data);
-  dev_handle->iqs7211a_deviceRDY = false;
+  iqs7211a_sensor.iqs7211a_deviceRDY = false;
 
-  ret = iqs7211a_start_up(dev_handle);
-  if (ret < 0)
-  {
-    return -1;
-  }
+  iqs7211a_sensor.dev_state.state      = IQS7211A_STATE_START;
+  iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_VERIFY_PRODUCT;
   return 1;
 }
 
-void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pins)
+void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pin)
 {
-  printf("Button is pressed\n");
+  printf("Interrupt Received\n");
+  // Read the state of the interrupt pin
+  int pin_state = gpio_pin_get(dev, pin);
+
+  // Check the state and update iqs7211a_deviceRDY
+  if (pin_state > 0) {
+    iqs7211a_sensor.iqs7211a_deviceRDY = false;
+      printf("Rising edge\n");
+  } else {
+    iqs7211a_sensor.iqs7211a_deviceRDY = true;
+      printf("Falling edge\n");
+  }
 }
 
-void iqs7211a_run(iqs7211a_dev *dev_handle)
+void iqs7211a_run()
 {
-  switch (dev_handle->dev_state.state)
+  switch (iqs7211a_sensor.dev_state.state)
   {
   /* After a hardware reset, this is the starting position of the running state
      machine */
   case IQS7211A_STATE_START:
     printf("IQS7211A Initialization:");
-    dev_handle->dev_state.state = IQS7211A_STATE_INIT;
+    iqs7211a_sensor.dev_state.state = IQS7211A_STATE_INIT;
     break;
 
   /* Perform the initialization routine on the IQS7211A */
   case IQS7211A_STATE_INIT:
-    // if(config_iqs7211a())
-    // {
-    //   printf("IQS7211A Initialization complete!\n");
-    //   dev_handle->dev_state.state = IQS7211A_STATE_RUN;
-    // }
+    if(iqs7211a_start_up())
+    {
+      printf("IQS7211A Initialization complete!\n");
+      iqs7211a_sensor.dev_state.state = IQS7211A_STATE_RUN;
+    }
     break;
 
   /* Send an I2C software reset in the next RDY window */
   case IQS7211A_STATE_SW_RESET:
-    if (dev_handle->iqs7211a_deviceRDY)
+    if (iqs7211a_sensor.iqs7211a_deviceRDY)
     {
-      // SW_Reset(STOP);
-      dev_handle->dev_state.state = IQS7211A_STATE_RUN;
+      IQS7211A_SW_Reset();
+      iqs7211a_sensor.dev_state.state = IQS7211A_STATE_RUN;
     }
     break;
 
   /* Continuous reset monitoring state, ensure no reset event has occurred
     for data to be valid */
   case IQS7211A_STATE_CHECK_RESET:
-    if (checkReset(dev_handle))
+    if (checkReset())
     {
       printf("Reset occurred!\n");
-      // dev_handle->new_data_available = false;
-      dev_handle->dev_state.state = IQS7211A_STATE_START;
+      iqs7211a_sensor.new_data_available = false;
+      iqs7211a_sensor.dev_state.state = IQS7211A_STATE_START;
     }
     /* A reset did not occur, move to the run state and wait for a new RDY window */
     else
     {
-      // new_data_available = true; /* No reset, thus data is valid */
-      dev_handle->dev_state.state = IQS7211A_STATE_RUN;
+      iqs7211a_sensor.new_data_available = true; /* No reset, thus data is valid */
+      iqs7211a_sensor.dev_state.state = IQS7211A_STATE_RUN;
     }
     break;
 
   /* If a RDY Window is open, read the latest values from the IQS7211A */
   case IQS7211A_STATE_RUN:
-    if (dev_handle->iqs7211a_deviceRDY)
+    if (iqs7211a_sensor.iqs7211a_deviceRDY)
     {
       // queueValueUpdates();
-      dev_handle->iqs7211a_deviceRDY = false;
+      iqs7211a_sensor.iqs7211a_deviceRDY = false;
       // new_data_available = false;
-      dev_handle->dev_state.state = IQS7211A_STATE_CHECK_RESET;
+      iqs7211a_sensor.dev_state.state = IQS7211A_STATE_CHECK_RESET;
     }
     break;
   default:
@@ -140,21 +153,22 @@ void iqs7211a_run(iqs7211a_dev *dev_handle)
   }
 }
 
-bool checkReset(iqs7211a_dev *dev_handle)
+bool checkReset()
 {
   /* Perform a bitwise AND operation inside the IQS7211A_getBit() function with the
   SHOW_RESET_BIT to return the reset status */
   return false; // IQS7211A_getBit(iqs7211a_dev->IQS_memory_map.INFO_FLAGS[0], IQS7211A_SHOW_RESET_BIT);
 }
 
-int iqs7211a_start_up(iqs7211a_dev *dev_handle)
+int iqs7211a_start_up()
 {
-  switch (dev_handle->dev_state.init_state)
+  switch (iqs7211a_sensor.dev_state.init_state)
   {
   /* Verifies product number to determine if the correct device is connected
   for this example */
-  case IQS7211A_INIT_VERIFY_PRODUCT:{
-    struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  case IQS7211A_INIT_VERIFY_PRODUCT:
+  if(iqs7211a_sensor.iqs7211a_deviceRDY){
+    struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
     int ret;
 
     uint8_t data[2];
@@ -189,101 +203,101 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
     if (productNumber == IQS7211A_PRODUCT_NUM)
     {
       printf("\t\tIQS7211A Release UI Confirmed!\n");
-      dev_handle->dev_state.init_state = IQS7211A_INIT_READ_RESET;
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_READ_RESET;
     }
     else
     {
       printf("\t\tDevice is not a IQS7211A!\n");
-      dev_handle->dev_state.init_state = IQS7211A_INIT_NONE;
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_NONE;
     }
-
-    k_msleep(100);
     }
 
     break;
 
   /* Verify if a reset has occurred */
-  case IQS7211A_INIT_READ_RESET:{
+  case IQS7211A_INIT_READ_RESET:
+  if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_READ_RESET");
-      IQS7211A_updateInfoFlags(dev_handle);
-      if (checkReset(dev_handle))
+      IQS7211A_updateInfoFlags();
+      if (checkReset())
       {
         printf("\t\tReset event occurred.\n");
-        dev_handle->dev_state.init_state = IQS7211A_INIT_UPDATE_SETTINGS;
+        iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_UPDATE_SETTINGS;
       }
       else
       {
         printf("\t\t No Reset Event Detected - Request SW Reset\n");
-        dev_handle->dev_state.init_state = IQS7211A_INIT_CHIP_RESET;
+        iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_CHIP_RESET;
       }}
     break;
 
   /* Perform SW Reset */
-  case IQS7211A_INIT_CHIP_RESET:{
+  case IQS7211A_INIT_CHIP_RESET:
+  if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_CHIP_RESET\n");
 
       // Perform SW Reset
-      IQS7211A_SW_Reset(dev_handle);
+      IQS7211A_SW_Reset();
       printf("\t\tSoftware Reset Bit Set.\n");
       k_msleep(100);
-      dev_handle->dev_state.init_state = IQS7211A_INIT_READ_RESET;
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_READ_RESET;
   }
     break;
 
   /* Write all settings to IQS7211A from .h file */
   case IQS7211A_INIT_UPDATE_SETTINGS:
-  {
+  if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_UPDATE_SETTINGS\n");
-      IQS7211A_writeMM(dev_handle);
-      dev_handle->dev_state.init_state = IQS7211A_INIT_ACK_RESET;
+      IQS7211A_writeMM();
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_ACK_RESET;
     }
     break;
 
   /* Acknowledge that the device went through a reset */
   case IQS7211A_INIT_ACK_RESET:
-    {
+    if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_ACK_RESET\n");
-      IQS7211A_acknowledgeReset(dev_handle);
-      dev_handle->dev_state.init_state = IQS7211A_INIT_ATI;
+      IQS7211A_acknowledgeReset();
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_ATI;
     }
     break;
 
   /* Run the ATI algorithm to recalibrate the device with newly added settings */
   case IQS7211A_INIT_ATI:
-    {
+    if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_ATI\n");
-      IQS7211A_ReATI(dev_handle);
-      dev_handle->dev_state.init_state = IQS7211A_INIT_WAIT_FOR_ATI;
+      IQS7211A_ReATI();
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_WAIT_FOR_ATI;
       printf("\tIQS7211A_INIT_WAIT_FOR_ATI\n");
     }
     break;
 
   /* Read the ATI Active bit to see if the rest of the program can continue */
   case IQS7211A_INIT_WAIT_FOR_ATI:
-    {
-      if (!IQS7211A_readATIactive(dev_handle))
+    if(iqs7211a_sensor.iqs7211a_deviceRDY){
+      if (!IQS7211A_readATIactive())
       {
         printf("\t\tDONE");
-        dev_handle->dev_state.init_state = IQS7211A_INIT_READ_DATA;
+        iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_READ_DATA;
       }
     }
     break;
 
   /* Read the latest data from the iqs7211a */
   case IQS7211A_INIT_READ_DATA:
-    {
+    if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_READ_DATA\n");
-      IQS7211A_queueValueUpdates(dev_handle);
-      dev_handle->dev_state.init_state = IQS7211A_INIT_ACTIVATE_EVENT_MODE;
+      IQS7211A_queueValueUpdates();
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_ACTIVATE_EVENT_MODE;
     }
     break;
 
   /* Turn on I2C Event mode */
   case IQS7211A_INIT_ACTIVATE_EVENT_MODE:
-    {
+    if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_ACTIVATE_EVENT_MODE\n");
-      IQS7211A_setEventMode(dev_handle);
-      dev_handle->dev_state.init_state = IQS7211A_INIT_DONE;
+      IQS7211A_setEventMode();
+      iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_DONE;
     }
     break;
 
@@ -297,6 +311,7 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
    * up as an interrupt to indicate when new data is available */
   case IQS7211A_INIT_DONE:
     printf("\tIQS7211A_INIT_DONE\n");
+    iqs7211a_sensor.new_data_available = true;
     return true;
     break;
 
@@ -306,9 +321,9 @@ int iqs7211a_start_up(iqs7211a_dev *dev_handle)
   return false;
 }
 
-void IQS7211A_writeMM(iqs7211a_dev *dev_handle)
+void IQS7211A_writeMM()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   // To put reset
 
   uint8_t transferBytes[30]; // Temporary array which holds the bytes to be transferred.
@@ -600,7 +615,7 @@ uint8_t IQS7211A_setBit(uint8_t data, uint8_t bit_number)
 }
 
 /**
-  * @name   getBit
+  * @name   IQS7211A_getBit
   * @brief  A method that returns the chosen bit value of the provided byte.
   * @param  data       -> byte of which a given bit value needs to be calculated.
   * @param  bit_number -> a number between 0 and 7 representing the bit in question.
@@ -634,9 +649,9 @@ uint8_t IQS7211A_clearBit(uint8_t data, uint8_t bit_number)
  * @note   All other bits at the IQS7211A_MM_CONFIG_SETTINGS register address
  *         are preserved.
  */
-void IQS7211A_enableTPEvent(iqs7211a_dev *dev_handle)
+void IQS7211A_enableTPEvent()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferBytes[2]; // The array which will hold the bytes which are transferred.
   memset(transferBytes,0,sizeof(transferBytes));
 
@@ -659,9 +674,9 @@ void IQS7211A_enableTPEvent(iqs7211a_dev *dev_handle)
  * @note   All other bits at the IQS7211A_MM_CONFIG_SETTINGS register address
  *         are preserved.
  */
-void IQS7211A_disableTPEvent(iqs7211a_dev *dev_handle)
+void IQS7211A_disableTPEvent()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferBytes[2]; // The array which will hold the bytes which are transferred.
   memset(transferBytes,0,sizeof(transferBytes));
 
@@ -681,7 +696,7 @@ void IQS7211A_disableTPEvent(iqs7211a_dev *dev_handle)
  *                            the second to touch the trackpad.
  * @retval  Returns 16-bit coordinate value.
  */
-uint16_t IQS7211A_getAbsXCoordinate(iqs7211a_dev *dev_handle, uint8_t fingerNum)
+uint16_t IQS7211A_getAbsXCoordinate(uint8_t fingerNum)
 {
   /* The 16-bit return value. */
   uint16_t absXCoordReturn = 0;
@@ -689,18 +704,48 @@ uint16_t IQS7211A_getAbsXCoordinate(iqs7211a_dev *dev_handle, uint8_t fingerNum)
   /* Construct the 16-bit return value. */
   if (fingerNum == FINGER_1)
   {
-    absXCoordReturn = (uint16_t)(dev_handle->IQS_memory_map.FINGER_1_X[0]);
-    absXCoordReturn |= (uint16_t)(dev_handle->IQS_memory_map.FINGER_1_X[1] << 8);
+    absXCoordReturn = (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_1_X[0]);
+    absXCoordReturn |= (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_1_X[1] << 8);
   }
   else if (fingerNum == FINGER_2)
   {
-    absXCoordReturn = (uint16_t)(dev_handle->IQS_memory_map.FINGER_2_X[0]);
-    absXCoordReturn |= (uint16_t)(dev_handle->IQS_memory_map.FINGER_2_X[1] << 8);
+    absXCoordReturn = (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_2_X[0]);
+    absXCoordReturn |= (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_2_X[1] << 8);
   }
   /*- Return the coordinate value.
     - Note that a value of 65535 (0xFFFF) means there is no touch. */
   return absXCoordReturn;
 }
+
+/**
+ * @name	  getAbsYCoordinate
+ * @brief   A method that returns the constructed 16-bit coordinate value
+ * @param   fingerNum     ->  Specifies the finger number. Finger 1 is the  
+ *                            first finger to touch the trackpad, finger 2 is 
+ *                            the second to touch the trackpad.
+ * @retval  Returns 16-bit coordinate value.
+ */
+uint16_t IQS7211A_getAbsYCoordinate(uint8_t fingerNum)
+{
+  /* The 16-bit return value. */
+  uint16_t absYCoordReturn = 0; 
+
+  /* Construct the 16-bit return value. */
+  if (fingerNum == FINGER_1)
+  {
+    absYCoordReturn = (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_1_Y[0]);
+    absYCoordReturn |= (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_1_Y[1] << 8);
+  }
+  else if (fingerNum == FINGER_2)
+  {
+    absYCoordReturn = (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_2_Y[0]);
+    absYCoordReturn |= (uint16_t)(iqs7211a_sensor.IQS_memory_map.FINGER_2_Y[1] << 8);
+  }
+  /* Return the coordinate value. Note that a value of 65535 (0xFFFF) means 
+    there is no touch. */
+  return absYCoordReturn;
+}
+
 
 /**
  * @name   updateAbsCoordinates
@@ -717,9 +762,9 @@ uint16_t IQS7211A_getAbsXCoordinate(iqs7211a_dev *dev_handle, uint8_t fingerNum)
  *         with the new values from the IQS7211A device. The user can use the
  *         getAbsXCoordinate and getAbsYCoordinate methods to return the value.
  */
-void IQS7211A_updateAbsCoordinates(iqs7211a_dev *dev_handle, uint8_t fingerNum)
+void IQS7211A_updateAbsCoordinates(uint8_t fingerNum)
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   /* The temporary address which will hold the bytes from the
   IQS7211A_MM_FINGER_1_X register address. */
   uint8_t transferBytes[4];
@@ -730,10 +775,10 @@ void IQS7211A_updateAbsCoordinates(iqs7211a_dev *dev_handle, uint8_t fingerNum)
        Finger 1 address. */
     iqs7211a_read(IQS7211A_MM_FINGER_1_X, transferBytes, 4, &i2c_handle);
     /*  Assign the bytes to the union. */
-    dev_handle->IQS_memory_map.FINGER_1_X[0] = transferBytes[0];
-    dev_handle->IQS_memory_map.FINGER_1_X[1] = transferBytes[1];
-    dev_handle->IQS_memory_map.FINGER_1_Y[0] = transferBytes[2];
-    dev_handle->IQS_memory_map.FINGER_1_Y[1] = transferBytes[3];
+    iqs7211a_sensor.IQS_memory_map.FINGER_1_X[0] = transferBytes[0];
+    iqs7211a_sensor.IQS_memory_map.FINGER_1_X[1] = transferBytes[1];
+    iqs7211a_sensor.IQS_memory_map.FINGER_1_Y[0] = transferBytes[2];
+    iqs7211a_sensor.IQS_memory_map.FINGER_1_Y[1] = transferBytes[3];
   }
   else if (fingerNum == FINGER_2)
   {
@@ -741,10 +786,10 @@ void IQS7211A_updateAbsCoordinates(iqs7211a_dev *dev_handle, uint8_t fingerNum)
       Finger 2 address. */
     iqs7211a_read(IQS7211A_MM_FINGER_2_X, transferBytes, 4, &i2c_handle);
     /*  Assign the bytes to the union. */
-    dev_handle->IQS_memory_map.FINGER_2_X[0] = transferBytes[0];
-    dev_handle->IQS_memory_map.FINGER_2_X[1] = transferBytes[1];
-    dev_handle->IQS_memory_map.FINGER_2_Y[0] = transferBytes[2];
-    dev_handle->IQS_memory_map.FINGER_2_Y[1] = transferBytes[3];
+    iqs7211a_sensor.IQS_memory_map.FINGER_2_X[0] = transferBytes[0];
+    iqs7211a_sensor.IQS_memory_map.FINGER_2_X[1] = transferBytes[1];
+    iqs7211a_sensor.IQS_memory_map.FINGER_2_Y[0] = transferBytes[2];
+    iqs7211a_sensor.IQS_memory_map.FINGER_2_Y[1] = transferBytes[3];
   }
 }
 
@@ -758,9 +803,9 @@ void IQS7211A_updateAbsCoordinates(iqs7211a_dev *dev_handle, uint8_t fingerNum)
  * @retval None.
  * @note   To perform SW Reset, IQS7211A_SW_RESET_BIT in SYSTEM_CONTROL is set.
  */
-void IQS7211A_SW_Reset(iqs7211a_dev *dev_handle)
+void IQS7211A_SW_Reset()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferByte[2]; // Array to store the bytes transferred.
   memset(transferByte,0,sizeof(transferByte));
 
@@ -781,9 +826,9 @@ void IQS7211A_SW_Reset(iqs7211a_dev *dev_handle)
   * @note   All other bits at this register address are preserved.
   */
 
-void IQS7211A_setEventMode(iqs7211a_dev *dev_handle)
+void IQS7211A_setEventMode()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferByte[2]; // The array which will hold the bytes which are transferred.
   memset(transferByte,0,sizeof(transferByte));
 
@@ -804,9 +849,9 @@ void IQS7211A_setEventMode(iqs7211a_dev *dev_handle)
  *              			      Use the STOP and RESTART definitions.
  * @retval None.
  */
-void IQS7211A_updateInfoFlags(iqs7211a_dev *dev_handle)
+void IQS7211A_updateInfoFlags()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   /* The array which will hold the bytes to be transferred. */
   uint8_t transferBytes[2]; 
   memset(transferBytes,0,sizeof(transferBytes));
@@ -814,8 +859,8 @@ void IQS7211A_updateInfoFlags(iqs7211a_dev *dev_handle)
   /* Read the info flags. */
   iqs7211a_read(IQS7211A_MM_INFOFLAGS, transferBytes, 2, &i2c_handle);
   /* Assign the info flags to the info flags union. */
-  dev_handle->IQS_memory_map.INFO_FLAGS[0] = transferBytes[0];
-  dev_handle->IQS_memory_map.INFO_FLAGS[1] = transferBytes[1];
+  iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0] = transferBytes[0];
+  iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[1] = transferBytes[1];
 }
 
 /**
@@ -830,9 +875,9 @@ void IQS7211A_updateInfoFlags(iqs7211a_dev *dev_handle)
  * 		     -  After new device settings have been reloaded this method should
  *            be used to clear the reset bit.
  */
-void IQS7211A_acknowledgeReset(iqs7211a_dev *dev_handle)
+void IQS7211A_acknowledgeReset()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferByte[2]; // A temporary array to hold the bytes to be transferred.
   memset(transferByte,0,sizeof(transferByte));
   /* Read the System Flags from the IQS7211A, these must be read first in order
@@ -855,11 +900,11 @@ void IQS7211A_acknowledgeReset(iqs7211a_dev *dev_handle)
  * 		      - After new device settings have been reloaded the acknowledgeReset()
  *            function can be used to clear the reset flag.
  */
-bool IQS7211A_checkReset(iqs7211a_dev *dev_handle)
+bool IQS7211A_checkReset()
 {
   /* Perform a bitwise AND operation inside the IQS7211A_getBit() function with the
   SHOW_RESET_BIT to return the reset status */
-  return IQS7211A_getBit(dev_handle->IQS_memory_map.INFO_FLAGS[0], IQS7211A_SHOW_RESET_BIT);
+  return IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0], IQS7211A_SHOW_RESET_BIT);
 }
 /**
  * @name    queueValueUpdates
@@ -870,38 +915,38 @@ bool IQS7211A_checkReset(iqs7211a_dev *dev_handle)
  * @note    Any address in the memory map can be read from here. This is where
  *          data read from the chip gets updated.
  */
-void IQS7211A_queueValueUpdates(iqs7211a_dev *dev_handle)
+void IQS7211A_queueValueUpdates()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferBytes[10]; // The array which will hold the bytes to be transferred.
   memset(transferBytes,0,sizeof(transferBytes));
   /* Read the gesture and info flags. */
   iqs7211a_read(IQS7211A_MM_INFOFLAGS, transferBytes, 4, &i2c_handle);
 
   /* Assign the info flags to the info flags */
-  dev_handle->IQS_memory_map.INFO_FLAGS[0] = transferBytes[0];
-  dev_handle->IQS_memory_map.INFO_FLAGS[1] = transferBytes[1];
+  iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0] = transferBytes[0];
+  iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[1] = transferBytes[1];
 
   /* Assign the gesture flags to the gesture flags */
-  dev_handle->IQS_memory_map.GESTURES[0] = transferBytes[2];
-  dev_handle->IQS_memory_map.GESTURES[1] = transferBytes[3];
+  iqs7211a_sensor.IQS_memory_map.GESTURES[0] = transferBytes[2];
+  iqs7211a_sensor.IQS_memory_map.GESTURES[1] = transferBytes[3];
 
   /* Read Finger 1 x and y coordinate. */
   iqs7211a_read(IQS7211A_MM_FINGER_1_X, transferBytes, 4, &i2c_handle);
 
   /* Read Finger 1 x and y coordinate. */
-  dev_handle->IQS_memory_map.FINGER_1_X[0] = transferBytes[0];
-  dev_handle->IQS_memory_map.FINGER_1_X[1] = transferBytes[1];
-  dev_handle->IQS_memory_map.FINGER_1_Y[0] = transferBytes[2];
-  dev_handle->IQS_memory_map.FINGER_1_Y[1] = transferBytes[3];
+  iqs7211a_sensor.IQS_memory_map.FINGER_1_X[0] = transferBytes[0];
+  iqs7211a_sensor.IQS_memory_map.FINGER_1_X[1] = transferBytes[1];
+  iqs7211a_sensor.IQS_memory_map.FINGER_1_Y[0] = transferBytes[2];
+  iqs7211a_sensor.IQS_memory_map.FINGER_1_Y[1] = transferBytes[3];
 
   /* Read Finger 2 x and y coordinate. */
   iqs7211a_read(IQS7211A_MM_FINGER_2_X, transferBytes, 4, &i2c_handle);
 
-  dev_handle->IQS_memory_map.FINGER_2_X[0] = transferBytes[0];
-  dev_handle->IQS_memory_map.FINGER_2_X[1] = transferBytes[1];
-  dev_handle->IQS_memory_map.FINGER_2_Y[0] = transferBytes[2];
-  dev_handle->IQS_memory_map.FINGER_2_Y[1] = transferBytes[3];
+  iqs7211a_sensor.IQS_memory_map.FINGER_2_X[0] = transferBytes[0];
+  iqs7211a_sensor.IQS_memory_map.FINGER_2_X[1] = transferBytes[1];
+  iqs7211a_sensor.IQS_memory_map.FINGER_2_Y[0] = transferBytes[2];
+  iqs7211a_sensor.IQS_memory_map.FINGER_2_Y[1] = transferBytes[3];
 }
 
 /**
@@ -914,12 +959,12 @@ void IQS7211A_queueValueUpdates(iqs7211a_dev *dev_handle)
  *         might exhibit unwanted behaviour. Thus it is advised to wait for
  *         the routine to complete before continuing.
  */
-bool IQS7211A_readATIactive(iqs7211a_dev *dev_handle)
+bool IQS7211A_readATIactive()
 {
   /* Read the Info flags from the IQS7211A*/
-  IQS7211A_updateInfoFlags(dev_handle);
+  IQS7211A_updateInfoFlags();
 
-  if (IQS7211A_getBit(dev_handle->IQS_memory_map.INFO_FLAGS[0], IQS7211A_RE_ATI_OCCURRED_BIT))
+  if (IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0], IQS7211A_RE_ATI_OCCURRED_BIT))
   {
     return false;
   }
@@ -939,9 +984,9 @@ bool IQS7211A_readATIactive(iqs7211a_dev *dev_handle)
  * @note   To force ATI, the IQS7211A_TP_RE_ATI_BIT in the System Control 
  *         register is set.
  */
-void IQS7211A_ReATI(iqs7211a_dev *dev_handle)
+void IQS7211A_ReATI()
 {
-  struct i2c_dt_spec i2c_handle = dev_handle->i2c_handle;
+  struct i2c_dt_spec i2c_handle = iqs7211a_sensor.i2c_handle;
   uint8_t transferByte[2]; // Array to store the bytes transferred.
   memset(transferByte,0,sizeof(transferByte));
 
@@ -950,4 +995,60 @@ void IQS7211A_ReATI(iqs7211a_dev *dev_handle)
   transferByte[0] = IQS7211A_setBit(transferByte[0], IQS7211A_TP_RE_ATI_BIT); 
   /* Write the new byte to the required device. */
   iqs7211a_write(IQS7211A_MM_SYSTEM_CONTROL, transferByte, 2 ,&i2c_handle);
+}
+
+/**
+  * @name   getPowerMode
+  * @brief  A method which reads the INFO_FLAGS from the memory map and returns 
+  *         the current power mode.
+  * @param  void
+  * @retval Returns the current iqs7211a_power_modes state the device is in.
+  * @note   See Datasheet on power mode options and timeouts. 
+  *         Normal Power, Low Power and Ultra Low Power (ULP).
+  */
+iqs7211a_power_modes IQS7211A_getPowerMode(void)
+{
+  uint8_t buffer = IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0], IQS7211A_CHARGING_MODE_BIT_0);
+  buffer += IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0], IQS7211A_CHARGING_MODE_BIT_1) << 1;
+  buffer += IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0], IQS7211A_CHARGING_MODE_BIT_2) << 2;
+
+  if(buffer == IQS7211A_ACTIVE_BITS)
+  {
+    return IQS7211A_ACTIVE;
+  }
+  else if(buffer == IQS7211A_IDLE_TOUCH_BITS)
+  {
+    return IQS7211A_IDLE_TOUCH;
+  }
+  else if(buffer == IQS7211A_IDLE_BITS)
+  {
+    return IQS7211A_IDLE;
+  }
+    else if(buffer == IQS7211A_LP1_BITS)
+  {
+    return IQS7211A_LP1;
+  }
+    else if(buffer == IQS7211A_LP2_BITS)
+  {
+    return IQS7211A_LP2;
+  }
+  else
+  {
+    return IQS7211A_POWER_UNKNOWN;
+  }
+}
+
+/**
+  * @name   getNumFingers
+  * @brief  A method that returns the number of fingers active on the trackpad. 
+  * @param  None.
+  * @retval Returns an 8-bit unsigned integer value of the number of fingers 
+  *         on the trackpad. 
+  */
+uint8_t IQS7211A_getNumFingers(void)
+{
+  uint8_t buffer = IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[1], IQS7211A_NUM_FINGERS_BIT_0);
+  buffer += IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[1], IQS7211A_NUM_FINGERS_BIT_1);
+
+  return buffer;
 }

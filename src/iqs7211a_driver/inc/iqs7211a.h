@@ -153,11 +153,18 @@ typedef struct
   iqs7211a_memory_map IQS_memory_map;
   struct i2c_dt_spec i2c_handle;
   struct gpio_dt_spec interrupt_pin;
-  bool iqs7211a_deviceRDY;
   uint8_t iqs7211a_ready_pin;
+  bool iqs7211a_deviceRDY;
+  bool new_data_available;
 } iqs7211a_dev;
 
-int iqs7211a_init(iqs7211a_dev *dev_handle);
-void iqs7211a_run(iqs7211a_dev *dev_handle); // Task Handle function
+extern iqs7211a_dev iqs7211a_sensor;
+
+int iqs7211a_init();
+void iqs7211a_run();
+iqs7211a_power_modes IQS7211A_getPowerMode(void);
+uint8_t IQS7211A_getNumFingers(void);
+uint16_t IQS7211A_getAbsXCoordinate(uint8_t fingerNum);
+uint16_t IQS7211A_getAbsYCoordinate(uint8_t fingerNum);
 
 #endif // IQS7211A_h
