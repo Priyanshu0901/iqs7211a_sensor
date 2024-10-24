@@ -8,7 +8,7 @@
 
 #define IQS7211A_PRODUCT_NUM 0x02FB
 
-#define I2C_LINE_DEBUG 1
+// #define I2C_LINE_DEBUG 1
 
 // Info Flags Byte Bits.
 #define IQS7211A_CHARGING_MODE_BIT_0 0

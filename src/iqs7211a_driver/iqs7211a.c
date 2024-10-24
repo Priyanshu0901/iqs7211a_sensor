@@ -7,7 +7,7 @@ void iqs7211a_run();
 iqs7211a_power_modes IQS7211A_getPowerMode(void);
 uint8_t IQS7211A_getNumFingers(void);
 
-int iqs7211a_start_up();
+bool iqs7211a_start_up();
 int iqs7211a_read(uint8_t reg_addr, const uint8_t *reg_data, uint32_t length, struct i2c_dt_spec *i2c_handle);
 int iqs7211a_write(uint8_t reg_addr, const uint8_t *reg_data, uint32_t length, struct i2c_dt_spec *i2c_handle);
 void iqs7211a_ready_interrupt(const struct device *dev, struct gpio_callback *cb, gpio_port_pins_t pin);
@@ -112,6 +112,7 @@ void iqs7211a_run()
     if (iqs7211a_sensor.iqs7211a_deviceRDY)
     {
       IQS7211A_SW_Reset();
+      iqs7211a_sensor.iqs7211a_deviceRDY = false;
       iqs7211a_sensor.dev_state.state = IQS7211A_STATE_RUN;
     }
     break;
@@ -137,9 +138,9 @@ void iqs7211a_run()
   case IQS7211A_STATE_RUN:
     if (iqs7211a_sensor.iqs7211a_deviceRDY)
     {
-      // queueValueUpdates();
+      IQS7211A_queueValueUpdates();
       iqs7211a_sensor.iqs7211a_deviceRDY = false;
-      // new_data_available = false;
+      iqs7211a_sensor.new_data_available = false;
       iqs7211a_sensor.dev_state.state = IQS7211A_STATE_CHECK_RESET;
     }
     break;
@@ -152,10 +153,10 @@ bool checkReset()
 {
   /* Perform a bitwise AND operation inside the IQS7211A_getBit() function with the
   SHOW_RESET_BIT to return the reset status */
-  return false; // IQS7211A_getBit(iqs7211a_dev->IQS_memory_map.INFO_FLAGS[0], IQS7211A_SHOW_RESET_BIT);
+  return IQS7211A_getBit(iqs7211a_sensor.IQS_memory_map.INFO_FLAGS[0], IQS7211A_SHOW_RESET_BIT);
 }
 
-int iqs7211a_start_up()
+bool iqs7211a_start_up()
 {
   switch (iqs7211a_sensor.dev_state.init_state)
   {
@@ -172,7 +173,7 @@ int iqs7211a_start_up()
     ret = iqs7211a_read(IQS7211A_MM_PROD_NUM, data, 2, &i2c_handle);
     if (ret < 0)
     {
-      return -1;
+      return false;
     }
     uint16_t productNumber = (uint16_t)data[0] | (uint16_t)(data[1] << 8);
 
@@ -181,7 +182,7 @@ int iqs7211a_start_up()
     ret = iqs7211a_read(IQS7211A_MM_MAJOR_VERSION_NUM, data, 2, &i2c_handle);
     if (ret < 0)
     {
-      return -1;
+      return false;
     }
     uint8_t ver_maj = data[0];
 
@@ -190,7 +191,7 @@ int iqs7211a_start_up()
     ret = iqs7211a_read(IQS7211A_MM_MINOR_VERSION_NUM, data, 2, &i2c_handle);
     if (ret < 0)
     {
-      return -1;
+      return false;
     }
     uint8_t ver_min = data[0];
     printf("\t\tProduct number is: %d v%d.%d\n", productNumber, ver_maj, ver_min);
@@ -233,6 +234,7 @@ int iqs7211a_start_up()
 
       // Perform SW Reset
       IQS7211A_SW_Reset();
+      iqs7211a_sensor.iqs7211a_deviceRDY = false;
       printf("\t\tSoftware Reset Bit Set.\n");
       k_msleep(100);
       iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_READ_RESET;
@@ -253,6 +255,7 @@ int iqs7211a_start_up()
     if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_ACK_RESET\n");
       IQS7211A_acknowledgeReset();
+      iqs7211a_sensor.iqs7211a_deviceRDY = false;
       iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_ATI;
     }
     break;
@@ -262,6 +265,7 @@ int iqs7211a_start_up()
     if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_ATI\n");
       IQS7211A_ReATI();
+      iqs7211a_sensor.iqs7211a_deviceRDY = false;
       iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_WAIT_FOR_ATI;
       printf("\tIQS7211A_INIT_WAIT_FOR_ATI\n");
     }
@@ -292,6 +296,7 @@ int iqs7211a_start_up()
     if(iqs7211a_sensor.iqs7211a_deviceRDY){
       printf("\tIQS7211A_INIT_ACTIVATE_EVENT_MODE\n");
       IQS7211A_setEventMode();
+      iqs7211a_sensor.iqs7211a_deviceRDY = false;
       iqs7211a_sensor.dev_state.init_state = IQS7211A_INIT_DONE;
     }
     break;
